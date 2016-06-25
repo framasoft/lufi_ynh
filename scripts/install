@@ -1,0 +1,67 @@
+#!/bin/bash
+
+# Exit on command errors and treat unset variables as an error
+set -eu
+
+app=$YNH_APP_INSTANCE_NAME
+
+domain=$YNH_APP_ARG_DOMAIN
+path=$YNH_APP_ARG_PATH
+contact=$YNH_APP_ARG_CONTACT
+public=$YNH_APP_ARG_IS_PUBLIC
+secret=$(ynh_string_random 24)
+
+# Source YunoHost helpers
+source /usr/share/yunohost/helpers
+
+# Save app settings
+ynh_app_setting_set "$app" version "ab8c880a"
+
+# Check domain/path availability
+sudo yunohost app checkurl "${domain}${path}" -a "$app" \
+    || ynh_die "Path not available: ${domain}${path}"
+
+# Install dependencies
+sudo apt-get install build-essential
+echo "yes" | sudo cpan Carton
+
+# Create user
+sudo adduser $app --home $src_path --no-create-home
+
+# Copy source files
+src_path=/var/www/$app
+sudo git clone https://git.framasoft.org/luc/lufi.git $src_path
+sudo cd $src_path
+sudo carton install
+sudo cp lufi.conf.template lufi.conf
+
+sudo sed -e "s@#proxy  => 1,@proxy  => 1,@" \
+         -e "s@#contact       => 'admin[at]example.com',@contact       => '$contact',@" \
+         -e "s@#secrets        => ['fdjsofjoihrei'],@secrets        => ['$secret'],@" \
+         -e "s@#prefix        => '/',@#prefix        => '$path',@" \
+         -i lufi.conf
+
+sudo cp utilities/lufi.service /etc/systemd/system/
+sudo sed -e "s@User=www-data@User=$app@" \
+         -e "s@WorkingDirectory=/var/www/lufi/@WorkingDirectory=$src_path@" \
+         -e "s@PIDFile=/var/www/lufi/script/hypnotoad.pid@PIDFile=$src_path/script/hypnotoad.pid@" \
+         -i /etc/systemd/system/lufi.service
+
+sudo chown -R app: $src_path
+sudo systemctl daemon-reload
+sudo systemctl enable lufi.service
+sudo systemctl start lufi.service
+
+sudo cp ../conf/nginx.conf
+sed -i "s@YNH_WWW_PATH@$path@g" $nginx_conf
+sed -i "s@YNH_LUFI_PORT@8081/@g" $nginx_conf
+sudo cp $nginx_conf /etc/nginx/conf.d/$domain.d/$app.conf
+
+# If app is public, add url to SSOWat conf as skipped_uris
+if [[ $is_public -eq 1 ]]; then
+    # unprotected_uris allows SSO credentials to be passed anyway.
+    ynh_app_setting_set "$app" unprotected_uris "/"
+fi
+
+# Reload services
+sudo service nginx reload

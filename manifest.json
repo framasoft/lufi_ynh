@@ -1,0 +1,64 @@
+{
+    "name": "YunoHost Lufi app",
+    "id": "ynlufi",
+    "packaging_format": 1,
+    "description": {
+        "en": "Lufi for YunoHost.",
+        "fr": "Lufi pour YunoHost."
+    },
+    "url": "https://framagit.org/luc/lufi",
+    "license": "free",
+    "maintainer": {
+        "name": "Luc Didry",
+        "email": "luc@didry.org",
+        "url": "https://luc.frama.io"
+    },
+    "requirements": {
+        "yunohost": ">> 2.4.0"
+    },
+    "multi_instance": false,
+    "services": [
+        "nginx"
+    ],
+    "arguments": {
+        "install" : [
+            {
+                "name": "domain",
+                "type": "domain",
+                "ask": {
+                    "en": "Choose a domain name for your Lufi",
+                    "fr": "Choisissez un nom de domaine pour votre Lufi"
+                },
+                "example": "example.org"
+            },
+            {
+                "name": "path",
+                "type": "path",
+                "ask": {
+                    "en": "Choose a path for your Lufi",
+                    "fr": "Choisissez un chemin pour votre Lufi"
+                },
+                "example": "/lufi",
+                "default": "/lufi"
+            },
+            {
+                "name": "contact",
+                "type": "text",
+                "ask": {
+                    "en": "Give a contact information",
+                    "fr": "Donner une information de contact"
+                },
+                "example": "contact[at]example.org"
+            },
+            {
+                "name": "is_public",
+                "type": "boolean",
+                "ask": {
+                    "en": "Is it a public application?",
+                    "fr": "Est-ce une application publique ?"
+                },
+                "default": true
+            }
+        ]
+    }
+}
