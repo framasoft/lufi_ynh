@@ -1,10 +1,10 @@
 {
-    "name": "YunoHost Lufi app",
-    "id": "ynlufi",
+    "name": "Lufi",
+    "id": "lufi",
     "packaging_format": 1,
     "description": {
-        "en": "Lufi for YunoHost.",
-        "fr": "Lufi pour YunoHost."
+        "en": "Lufi, easy file confidentially sharing.",
+        "fr": "Lufi, partage de fichier simple et confidentiel."
     },
     "url": "https://framagit.org/luc/lufi",
     "license": "free",

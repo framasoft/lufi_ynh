@@ -3,42 +3,59 @@
 # Exit on command errors and treat unset variables as an error
 set -eu
 
+# Source YunoHost helpers
+source /usr/share/yunohost/helpers
+
 app=$YNH_APP_INSTANCE_NAME
 
 domain=$YNH_APP_ARG_DOMAIN
 path=$YNH_APP_ARG_PATH
 contact=$YNH_APP_ARG_CONTACT
-public=$YNH_APP_ARG_IS_PUBLIC
+is_public=$YNH_APP_ARG_IS_PUBLIC
 secret=$(ynh_string_random 24)
-
-# Source YunoHost helpers
-source /usr/share/yunohost/helpers
+src_path=/var/www/$app
+port=8081
+while ! sudo yunohost app checkport $port ; do
+    port=$((port+1))
+done
+dir=$(pwd)
 
 # Save app settings
-ynh_app_setting_set "$app" version "ab8c880a"
+ynh_app_setting_set "$app" version "7db7688b"
+ynh_app_setting_set "$app" is_public "$is_public"
+ynh_app_setting_set "$app" secret "$secret"
 
 # Check domain/path availability
 sudo yunohost app checkurl "${domain}${path}" -a "$app" \
     || ynh_die "Path not available: ${domain}${path}"
 
 # Install dependencies
-sudo apt-get install build-essential
+if ! ynh_package_is_installed "build-essential" ; then
+     ynh_package_install build-essential
+fi
+if ! ynh_package_is_installed "libssl-dev" ; then
+     ynh_package_install libssl-dev
+fi
 echo "yes" | sudo cpan Carton
 
 # Create user
-sudo adduser $app --home $src_path --no-create-home
+if ! ynh_system_user_exists "$app" ; then
+    sudo adduser $app --home $src_path --no-create-home --disabled-password --gecos $app
+fi
 
 # Copy source files
-src_path=/var/www/$app
-sudo git clone https://git.framasoft.org/luc/lufi.git $src_path
-sudo cd $src_path
+sudo git clone https://framagit.org/luc/lufi.git $src_path
+cd $src_path
 sudo carton install
 sudo cp lufi.conf.template lufi.conf
+sudo chown -R $app: $src_path
 
-sudo sed -e "s@#proxy  => 1,@proxy  => 1,@" \
-         -e "s@#contact       => 'admin[at]example.com',@contact       => '$contact',@" \
-         -e "s@#secrets        => ['fdjsofjoihrei'],@secrets        => ['$secret'],@" \
-         -e "s@#prefix        => '/',@#prefix        => '$path',@" \
+# Configure
+sudo sed -e "s@listen *=>.*@listen => ['http://127.0.0.1:$port'],@" \
+         -e "s@#proxy *=>.*@proxy  => 1,@" \
+         -e "s@#contact *=>.*@contact       => '$contact',@" \
+         -e "s@#secrets *=>.*@secrets        => ['$secret'],@" \
+         -e "s@#prefix *=>.*@prefix        => '$path',@" \
          -i lufi.conf
 
 sudo cp utilities/lufi.service /etc/systemd/system/
@@ -47,14 +64,17 @@ sudo sed -e "s@User=www-data@User=$app@" \
          -e "s@PIDFile=/var/www/lufi/script/hypnotoad.pid@PIDFile=$src_path/script/hypnotoad.pid@" \
          -i /etc/systemd/system/lufi.service
 
-sudo chown -R app: $src_path
 sudo systemctl daemon-reload
 sudo systemctl enable lufi.service
+
+# Start
 sudo systemctl start lufi.service
 
-sudo cp ../conf/nginx.conf
+# Modify Nginx configuration file and copy it to Nginx conf directory
+cd $dir
+nginx_conf=../conf/nginx.conf
 sed -i "s@YNH_WWW_PATH@$path@g" $nginx_conf
-sed -i "s@YNH_LUFI_PORT@8081/@g" $nginx_conf
+sed -i "s@YNH_LUFI_PORT@$port/@g" $nginx_conf
 sudo cp $nginx_conf /etc/nginx/conf.d/$domain.d/$app.conf
 
 # If app is public, add url to SSOWat conf as skipped_uris
@@ -63,5 +83,8 @@ if [[ $is_public -eq 1 ]]; then
     ynh_app_setting_set "$app" unprotected_uris "/"
 fi
 
+domainregex=$(echo "$domain" | sed 's/-/\%&/g')
+pathregex=$(echo "$path" | sed 's/-/\%&/g')
+ynh_app_setting_set "$app" skipped_regex "$domainregex$pathregex/r/","$domainregex$pathregex/about","$domainregex$pathregex/download"
 # Reload services
 sudo service nginx reload
